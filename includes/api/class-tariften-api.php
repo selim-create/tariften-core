@@ -117,6 +117,10 @@ class Tariften_API {
 
     /**
      * Kullanıcı Verilerini Formatla (YENİ HELPER)
+     * 
+     * Format user data with all required fields for frontend consumption.
+     * Note: Some fields have duplicate keys (username/user_login, email/user_email, etc.)
+     * for backward compatibility with existing frontend code.
      */
     private function format_user_data($user_id) {
         $user = get_userdata($user_id);
@@ -414,12 +418,14 @@ class Tariften_API {
         require_once(ABSPATH . 'wp-admin/includes/media.php');
 
         // Eski avatar'ı sil
+        // Not: tariften_avatar_id bu kullanıcıya özel olarak kaydedildiği için güvenle silinebilir
         $old_avatar_id = get_user_meta($user_id, 'tariften_avatar_id', true);
         if ($old_avatar_id) {
             wp_delete_attachment($old_avatar_id, true);
         }
 
         // Dosyayı media_handle_upload için hazırla
+        // Not: $_FILES superglobal'i media_handle_upload için standart WordPress yöntemidir
         $_FILES['upload_file'] = $files['file'];
         $attachment_id = media_handle_upload('upload_file', 0);
 
