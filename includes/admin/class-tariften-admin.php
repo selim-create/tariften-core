@@ -33,6 +33,9 @@ class Tariften_Admin {
         // Görsel Servisleri
         register_setting( 'tariften_options_group', 'tariften_unsplash_key' ); // Unsplash Access Key
         register_setting( 'tariften_options_group', 'tariften_pexels_key' );   // Pexels API Key
+
+        // Google Ayarları (YENİ)
+        register_setting('tariften_options_group', 'tariften_google_client_id');
     }
 
     public function settings_page_html() {
@@ -79,6 +82,17 @@ class Tariften_Admin {
                         <td>
                             <input type="text" name="tariften_pexels_key" value="<?php echo esc_attr( get_option('tariften_pexels_key') ); ?>" class="regular-text" />
                             <p class="description"><a href="https://www.pexels.com/api/" target="_blank">Pexels API</a> panelinden alabilirsiniz.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h2 class="title">Google Entegrasyonu</h2>
+                <table class="form-table">
+                    <tr valign="top">
+                        <th scope="row">Google OAuth Client ID</th>
+                        <td>
+                            <input type="text" name="tariften_google_client_id" value="<?php echo esc_attr( get_option('tariften_google_client_id') ); ?>" class="regular-text" placeholder="123...apps.googleusercontent.com" />
+                            <p class="description">Google Cloud Console'dan aldığınız OAuth 2.0 Client ID.</p>
                         </td>
                     </tr>
                 </table>

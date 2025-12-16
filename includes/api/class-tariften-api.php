@@ -6,6 +6,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class Tariften_API {
 
+    public function __construct() {
+        add_action('rest_api_init', array($this, 'register_routes'));
+    }
+    
     public function register_routes() {
         $namespace = 'tariften/v1';
 
@@ -68,8 +72,313 @@ class Tariften_API {
         register_rest_route( $namespace, '/interactions/check', array(
             'methods'  => 'GET', 'callback' => array( $this, 'check_interaction_status' ), 'permission_callback' => array( $this, 'is_user_logged_in' ),
         ) );
+
+        // Google Login Endpoint
+        register_rest_route('tariften/v1', '/auth/google', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'handle_google_login'),
+            'permission_callback' => '__return_true',
+        ));
+
+        // Normal Register Endpoint
+        register_rest_route('tariften/v1', '/auth/register', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'handle_register'),
+            'permission_callback' => '__return_true',
+        ));
+
+        // Profil Güncelleme (YENİ)
+        register_rest_route('tariften/v1', '/auth/update', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'handle_profile_update'),
+            'permission_callback' => function () {
+                return is_user_logged_in();
+            },
+        ));
+
+        // Avatar Yükleme
+        register_rest_route('tariften/v1', '/auth/avatar', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'handle_avatar_upload'),
+            'permission_callback' => function () {
+                return is_user_logged_in();
+            },
+        ));
     }
 
+    // Google Login İşleyicisi (GÜÇLENDİRİLMİŞ & HATA GİDERİLMİŞ)
+    public function handle_google_login($request) {
+        $params = $request->get_json_params();
+        $access_token = isset($params['token']) ? $params['token'] : '';
+
+        if (empty($access_token)) {
+            return new WP_Error('no_token', 'Token bulunamadı', array('status' => 400));
+        }
+
+        // 1. Google'dan Kullanıcı Bilgilerini Doğrula
+        $google_api_url = 'https://www.googleapis.com/oauth2/v3/userinfo?access_token=' . $access_token;
+        $response = wp_remote_get($google_api_url);
+
+        if (is_wp_error($response)) {
+            return new WP_Error('google_error', 'Google bağlantı hatası: ' . $response->get_error_message(), array('status' => 500));
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $user_info = json_decode($body, true);
+
+        if (empty($user_info) || !isset($user_info['email'])) {
+            return new WP_Error('invalid_token', 'Geçersiz Token veya E-posta alınamadı.', array('status' => 401));
+        }
+
+        $email = $user_info['email'];
+        $first_name = isset($user_info['given_name']) ? $user_info['given_name'] : '';
+        $last_name = isset($user_info['family_name']) ? $user_info['family_name'] : '';
+        $full_name = isset($user_info['name']) ? $user_info['name'] : $first_name . ' ' . $last_name;
+
+        // 2. Kullanıcı Var mı Kontrol Et
+        $user = get_user_by('email', $email);
+
+        if (!$user) {
+            // Kullanıcı yoksa oluştur
+            $username = strtolower(sanitize_user(explode('@', $email)[0]));
+            
+            if (username_exists($username)) {
+                $username .= rand(100, 999);
+            }
+
+            $password = wp_generate_password();
+            $user_id = wp_create_user($username, $password, $email);
+
+            if (is_wp_error($user_id)) {
+                return $user_id;
+            }
+
+            wp_update_user(array(
+                'ID' => $user_id,
+                'first_name' => $first_name,
+                'last_name' => $last_name,
+                'display_name' => $full_name
+            ));
+
+            $user = get_user_by('id', $user_id);
+        }
+
+        // 3. JWT Token Oluştur (DÜZELTİLMİŞ YÖNTEM)
+        $token = '';
+        
+        // Önce wp-config.php içinde anahtar tanımlı mı kontrol et
+        if (!defined('JWT_AUTH_SECRET_KEY')) {
+            return new WP_Error('jwt_config_error', 'Sunucu Hatası: JWT Secret Key tanımlanmamış.', array('status' => 500));
+        }
+
+        /**
+         * YÖNTEM 1: Eklentinin sınıfını doğrudan çağırmak yerine,
+         * Eklentinin kullandığı kütüphaneyi kullanarak manuel token oluşturuyoruz.
+         * Çünkü eklentinin generate_token fonksiyonu WP_User değil WP_REST_Request bekliyor.
+         */
+        try {
+            // JWT kütüphanesini kullanabilmek için eklentinin yüklü olması gerekir.
+            // Eklenti genellikle Firebase\JWT\JWT sınıfını yükler.
+            // Eğer class yoksa, eklenti yüklü değil demektir.
+            
+            $secret_key = JWT_AUTH_SECRET_KEY;
+            $issuedAt   = time();
+            $notBefore  = $issuedAt;
+            $expire     = $issuedAt + (WEEK_IN_SECONDS); // 1 Hafta geçerli
+
+            $payload = array(
+                'iss' => get_bloginfo('url'),
+                'iat' => $issuedAt,
+                'nbf' => $notBefore,
+                'exp' => $expire,
+                'data' => array(
+                    'user' => array(
+                        'id' => $user->ID,
+                    ),
+                ),
+            );
+
+            // JWT sınıfının varlığını kontrol et
+            // Not: Farklı JWT eklentileri farklı sınıflar/namespaces kullanabilir.
+            // En yaygın olanı "JWT Authentication for WP-API" eklentisidir.
+            
+            if (class_exists('Firebase\JWT\JWT')) {
+                $token = \Firebase\JWT\JWT::encode($payload, $secret_key, 'HS256');
+            } 
+            // Alternatif: Belki eklenti eski versiyondur ve global JWT sınıfı vardır
+            else if (class_exists('JWT')) {
+                $token = JWT::encode($payload, $secret_key);
+            }
+            // YÖNTEM 2: Eklentinin generate_token fonksiyonunu zorla çalıştırmak (Riskli ama deneyelim)
+            else if (class_exists('JWT_Auth_Public')) {
+                 // Bu noktaya gelindiyse Firebase sınıfı bulunamadı demektir, 
+                 // ama JWT_Auth_Public var. Bu durumda eklentinin kendi metodunu
+                 // doğru parametrelerle (WP_REST_Request) çağırmayı deneyebiliriz.
+                 // Ancak Google login'de parola yok, bu yüzden bu yöntem çalışmaz (eklenti parola doğrular).
+                 // Bu yüzden manuel encode şart.
+                 
+                 return new WP_Error('jwt_lib_error', 'JWT Kütüphanesi bulunamadı. Lütfen "JWT Authentication for WP-API" eklentisini güncelleyin.', array('status' => 500));
+            } else {
+                 return new WP_Error('jwt_missing', 'JWT Eklentisi yüklü değil.', array('status' => 500));
+            }
+
+        } catch (Throwable $e) {
+            return new WP_Error('jwt_exception', 'Token üretilirken hata: ' . $e->getMessage(), array('status' => 500));
+        }
+
+        if (empty($token)) {
+             return new WP_Error('jwt_empty', 'Token oluşturulamadı.', array('status' => 500));
+        }
+
+        return array(
+            'token' => $token,
+            'user_email' => $user->user_email,
+            'user_nicename' => $user->user_nicename,
+            'user_display_name' => $user->display_name,
+        );
+    }
+
+    // Register İşleyicisi (GÜNCELLENDİ)
+    public function handle_register($request) {
+        $params = $request->get_json_params();
+        
+        $username = sanitize_user($params['username']);
+        $email = sanitize_email($params['email']);
+        $password = $params['password'];
+        $fullname = sanitize_text_field($params['fullname']);
+        
+        // Yeni Parametreler
+        $diet = isset($params['diet']) ? sanitize_text_field($params['diet']) : '';
+        $level = isset($params['level']) ? sanitize_text_field($params['level']) : ''; // Mutfak Deneyimi
+
+        if (username_exists($username) || email_exists($email)) {
+            return new WP_Error('exists', 'Kullanıcı adı veya e-posta zaten kayıtlı.', array('status' => 400));
+        }
+
+        $user_id = wp_create_user($username, $password, $email);
+
+        if (is_wp_error($user_id)) {
+            return $user_id;
+        }
+
+        // Kullanıcı Meta Verilerini Kaydet
+        wp_update_user(array(
+            'ID' => $user_id,
+            'display_name' => $fullname
+        ));
+
+        if (!empty($diet)) {
+            update_user_meta($user_id, 'tariften_diet', $diet);
+        }
+        
+        if (!empty($level)) {
+            update_user_meta($user_id, 'tariften_experience', $level);
+        }
+
+        return array('message' => 'Kayıt başarılı', 'user_id' => $user_id);
+    }
+
+   // Profil Güncelleme (GÜÇLENDİRİLDİ)
+    public function handle_profile_update($request) {
+        $user_id = get_current_user_id();
+        $params = $request->get_json_params();
+
+        // 1. Temel Bilgileri Güncelle
+        $update_data = array('ID' => $user_id);
+
+        if (isset($params['fullname'])) {
+            $update_data['display_name'] = sanitize_text_field($params['fullname']);
+        }
+
+        if (isset($params['email']) && is_email($params['email'])) {
+            $email = sanitize_email($params['email']);
+            // Başkası kullanmıyorsa güncelle
+            if (!email_exists($email) || email_exists($email) == $user_id) {
+                 $update_data['user_email'] = $email;
+            }
+        }
+
+        if (!empty($params['password'])) {
+            $update_data['user_pass'] = $params['password'];
+        }
+
+        $user_update_result = wp_update_user($update_data);
+
+        if (is_wp_error($user_update_result)) {
+            return new WP_Error('update_failed', 'Kullanıcı güncellenemedi: ' . $user_update_result->get_error_message(), array('status' => 500));
+        }
+
+        // 2. Meta Verileri Güncelle
+        if (isset($params['diet'])) {
+            update_user_meta($user_id, 'tariften_diet', sanitize_text_field($params['diet']));
+        }
+        
+        if (isset($params['experience'])) {
+            update_user_meta($user_id, 'tariften_experience', sanitize_text_field($params['experience']));
+        }
+
+        if (isset($params['bio'])) {
+            update_user_meta($user_id, 'description', sanitize_textarea_field($params['bio']));
+        }
+
+        // 3. Güncel Veriyi Döndür
+        $user = get_userdata($user_id);
+        
+        // Avatar URL (Özel Yüklenen Varsa Onu Al)
+        $avatar_id = get_user_meta($user_id, 'tariften_avatar_id', true);
+        $avatar_url = $avatar_id ? wp_get_attachment_url($avatar_id) : get_avatar_url($user_id);
+        
+        return array(
+            'message' => 'Profil güncellendi',
+            'user' => array(
+                'id' => $user->ID,
+                'username' => $user->user_login,
+                'email' => $user->user_email,
+                'fullname' => $user->display_name,
+                'diet' => get_user_meta($user->ID, 'tariften_diet', true),
+                'experience' => get_user_meta($user->ID, 'tariften_experience', true),
+                'bio' => get_user_meta($user->ID, 'description', true),
+                'avatar_url' => $avatar_url
+            )
+        );
+    }
+
+    // Avatar Yükleme (GÜÇLENDİRİLDİ)
+    public function handle_avatar_upload($request) {
+        $user_id = get_current_user_id();
+        
+        $files = $request->get_file_params();
+        
+        if (empty($files) || empty($files['file'])) {
+             return new WP_Error('no_file', 'Dosya yüklenmedi.', array('status' => 400));
+        }
+
+        $file = $files['file'];
+        
+        // WordPress Media Library için gerekli dosyalar
+        require_once(ABSPATH . 'wp-admin/includes/image.php');
+        require_once(ABSPATH . 'wp-admin/includes/file.php');
+        require_once(ABSPATH . 'wp-admin/includes/media.php');
+
+        // Dosyayı yükle
+        $attachment_id = media_handle_sideload($file, 0);
+
+        if (is_wp_error($attachment_id)) {
+             return new WP_Error('upload_error', 'Görsel yüklenemedi: ' . $attachment_id->get_error_message(), array('status' => 500));
+        }
+
+        // Meta alanına ID'yi kaydet
+        update_user_meta($user_id, 'tariften_avatar_id', $attachment_id);
+        
+        // URL'i al ve döndür
+        $url = wp_get_attachment_url($attachment_id);
+
+        return array(
+            'message' => 'Avatar güncellendi',
+            'avatar_url' => $url
+        );
+    }
+    
     /**
      * AI Tarif Üretimi (SEO MODÜLÜ EKLENDİ)
      */
