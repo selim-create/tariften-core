@@ -104,6 +104,66 @@ class Tariften_API {
                 return is_user_logged_in();
             },
         ));
+
+        // Mevcut Kullanıcı Bilgilerini Getir (YENİ)
+        register_rest_route('tariften/v1', '/auth/me', array(
+            'methods' => 'GET',
+            'callback' => array($this, 'get_current_user_data'),
+            'permission_callback' => function () {
+                return is_user_logged_in();
+            },
+        ));
+    }
+
+    /**
+     * Kullanıcı Verilerini Formatla (YENİ HELPER)
+     * 
+     * Format user data with all required fields for frontend consumption.
+     * Note: Some fields have duplicate keys (username/user_login, email/user_email, etc.)
+     * for backward compatibility with existing frontend code.
+     */
+    private function format_user_data($user_id) {
+        $user = get_userdata($user_id);
+        if (!$user) return null;
+
+        // Avatar önceliği: Özel yüklenen > Google avatar > Gravatar
+        $avatar_id = get_user_meta($user_id, 'tariften_avatar_id', true);
+        if ($avatar_id) {
+            $avatar_url = wp_get_attachment_url($avatar_id);
+        } else {
+            $google_avatar = get_user_meta($user_id, 'tariften_google_avatar', true);
+            $avatar_url = $google_avatar ?: get_avatar_url($user_id, array('size' => 200));
+        }
+
+        return array(
+            'id' => $user->ID,
+            'username' => $user->user_login,
+            'user_login' => $user->user_login,
+            'user_nicename' => $user->user_nicename,
+            'email' => $user->user_email,
+            'user_email' => $user->user_email,
+            'fullname' => $user->display_name,
+            'user_display_name' => $user->display_name,
+            'avatar_url' => $avatar_url ?: '',
+            'diet' => get_user_meta($user_id, 'tariften_diet', true) ?: '',
+            'experience' => get_user_meta($user_id, 'tariften_experience', true) ?: '',
+            'bio' => get_user_meta($user_id, 'description', true) ?: '',
+        );
+    }
+
+    /**
+     * Mevcut Kullanıcı Verilerini Getir (YENİ ENDPOINT)
+     */
+    public function get_current_user_data($request) {
+        $user_id = get_current_user_id();
+        if (!$user_id) {
+            return new WP_Error('not_logged_in', 'Oturum açılmamış.', array('status' => 401));
+        }
+        $user_data = $this->format_user_data($user_id);
+        if (!$user_data) {
+            return new WP_Error('user_not_found', 'Kullanıcı bulunamadı.', array('status' => 404));
+        }
+        return new WP_REST_Response(array('success' => true, 'user' => $user_data), 200);
     }
 
     // Google Login İşleyicisi (GÜÇLENDİRİLMİŞ & HATA GİDERİLMİŞ)
@@ -134,9 +194,11 @@ class Tariften_API {
         $first_name = isset($user_info['given_name']) ? $user_info['given_name'] : '';
         $last_name = isset($user_info['family_name']) ? $user_info['family_name'] : '';
         $full_name = isset($user_info['name']) ? $user_info['name'] : $first_name . ' ' . $last_name;
+        $google_avatar = isset($user_info['picture']) ? $user_info['picture'] : '';
 
         // 2. Kullanıcı Var mı Kontrol Et
         $user = get_user_by('email', $email);
+        $is_new_user = false;
 
         if (!$user) {
             // Kullanıcı yoksa oluştur
@@ -160,7 +222,18 @@ class Tariften_API {
                 'display_name' => $full_name
             ));
 
+            // Google avatar'ı kaydet
+            if (!empty($google_avatar)) {
+                update_user_meta($user_id, 'tariften_google_avatar', $google_avatar);
+            }
+
             $user = get_user_by('id', $user_id);
+            $is_new_user = true;
+        } else {
+            // Mevcut kullanıcı için Google avatar'ı güncelle
+            if (!empty($google_avatar)) {
+                update_user_meta($user->ID, 'tariften_google_avatar', $google_avatar);
+            }
         }
 
         // 3. JWT Token Oluştur (DÜZELTİLMİŞ YÖNTEM)
@@ -231,10 +304,10 @@ class Tariften_API {
         }
 
         return array(
+            'success' => true,
             'token' => $token,
-            'user_email' => $user->user_email,
-            'user_nicename' => $user->user_nicename,
-            'user_display_name' => $user->display_name,
+            'is_new_user' => $is_new_user,
+            'user' => $this->format_user_data($user->ID)
         );
     }
 
@@ -322,24 +395,10 @@ class Tariften_API {
         }
 
         // 3. Güncel Veriyi Döndür
-        $user = get_userdata($user_id);
-        
-        // Avatar URL (Özel Yüklenen Varsa Onu Al)
-        $avatar_id = get_user_meta($user_id, 'tariften_avatar_id', true);
-        $avatar_url = $avatar_id ? wp_get_attachment_url($avatar_id) : get_avatar_url($user_id);
-        
         return array(
+            'success' => true,
             'message' => 'Profil güncellendi',
-            'user' => array(
-                'id' => $user->ID,
-                'username' => $user->user_login,
-                'email' => $user->user_email,
-                'fullname' => $user->display_name,
-                'diet' => get_user_meta($user->ID, 'tariften_diet', true),
-                'experience' => get_user_meta($user->ID, 'tariften_experience', true),
-                'bio' => get_user_meta($user->ID, 'description', true),
-                'avatar_url' => $avatar_url
-            )
+            'user' => $this->format_user_data($user_id)
         );
     }
 
@@ -353,15 +412,22 @@ class Tariften_API {
              return new WP_Error('no_file', 'Dosya yüklenmedi.', array('status' => 400));
         }
 
-        $file = $files['file'];
-        
         // WordPress Media Library için gerekli dosyalar
         require_once(ABSPATH . 'wp-admin/includes/image.php');
         require_once(ABSPATH . 'wp-admin/includes/file.php');
         require_once(ABSPATH . 'wp-admin/includes/media.php');
 
-        // Dosyayı yükle
-        $attachment_id = media_handle_sideload($file, 0);
+        // Eski avatar'ı sil
+        // Not: tariften_avatar_id bu kullanıcıya özel olarak kaydedildiği için güvenle silinebilir
+        $old_avatar_id = get_user_meta($user_id, 'tariften_avatar_id', true);
+        if ($old_avatar_id) {
+            wp_delete_attachment($old_avatar_id, true);
+        }
+
+        // Dosyayı media_handle_upload için hazırla
+        // Not: $_FILES superglobal'i media_handle_upload için standart WordPress yöntemidir
+        $_FILES['upload_file'] = $files['file'];
+        $attachment_id = media_handle_upload('upload_file', 0);
 
         if (is_wp_error($attachment_id)) {
              return new WP_Error('upload_error', 'Görsel yüklenemedi: ' . $attachment_id->get_error_message(), array('status' => 500));
@@ -374,8 +440,10 @@ class Tariften_API {
         $url = wp_get_attachment_url($attachment_id);
 
         return array(
+            'success' => true,
             'message' => 'Avatar güncellendi',
-            'avatar_url' => $url
+            'avatar_url' => $url,
+            'attachment_id' => $attachment_id
         );
     }
     
