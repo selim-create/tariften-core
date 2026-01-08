@@ -338,6 +338,7 @@ private function _internal_generate_recipe_logic( $input_text, $prompt_type = 's
 
       "ingredients": [{"name":"Malzeme adı","amount":"Miktar","unit":"Birim"}],
       "steps": ["Adım 1","Adım 2","Adım 3","Adım 4","Adım 5","Adım 6 (en az 6 adım)"],
+      "chef_tip": "Bu tarife özel, pratik ve profesyonel bir şef ipucu (1-2 cümle)",
 
       "seo": {"title":"SEO Başlık (parantez içinde hook şart)","description":"SEO Açıklama","focus_keywords":"Anahtar kelimeler"}
     }';
@@ -1097,6 +1098,11 @@ MEVCUT (HATALI OLABİLİR):
                 if (isset($generated_data[$m])) update_post_meta($new_recipe_id, $m, sanitize_text_field($generated_data[$m]));
             }
             update_post_meta($new_recipe_id, 'tariften_steps', array_map('sanitize_text_field', $steps));
+            
+            // Chef tip - AI'dan gelen ipucu
+            if (!empty($generated_data['chef_tip'])) {
+                update_post_meta($new_recipe_id, 'tariften_chef_tip', sanitize_textarea_field($generated_data['chef_tip']));
+            }
 
             // ingredients
             $ingredients_formatted = [];
@@ -2282,6 +2288,17 @@ MEVCUT (HATALI OLABİLİR):
             if ( isset( $params[$meta] ) ) update_post_meta( $post_id, $meta, sanitize_text_field( $params[$meta] ) );
         }
         
+        // Yeni meta alanları
+        if (isset($params['chef_tip'])) {
+            update_post_meta($post_id, 'tariften_chef_tip', sanitize_textarea_field($params['chef_tip']));
+        }
+        if (isset($params['serving_weight'])) {
+            update_post_meta($post_id, 'tariften_serving_weight', intval($params['serving_weight']));
+        }
+        if (isset($params['keywords'])) {
+            update_post_meta($post_id, 'tariften_keywords', sanitize_text_field($params['keywords']));
+        }
+        
         if ( !empty( $params['image'] ) ) {
             if ( is_numeric( $params['image'] ) ) {
                 set_post_thumbnail( $post_id, $params['image'] );
@@ -2501,6 +2518,45 @@ MEVCUT (HATALI OLABİLİR):
     public function get_user_interactions($r) { global $wpdb; $u = get_current_user_id(); $t = $r->get_param('type')?:'favorite'; $ids = $wpdb->get_col($wpdb->prepare("SELECT recipe_id FROM {$wpdb->prefix}tariften_interactions WHERE user_id=%d AND type=%s ORDER BY created_at DESC", $u, $t)); if(empty($ids)) return new WP_REST_Response([],200); $q = new WP_Query(['post_type'=>'recipe', 'post__in'=>$ids, 'posts_per_page'=>-1, 'orderby'=>'post__in']); $recipes = []; while($q->have_posts()){ $q->the_post(); $recipes[] = $this->format_recipe_for_api(get_post()); } return new WP_REST_Response($recipes, 200); }
     public function check_interaction_status($r) { global $wpdb; $u = get_current_user_id(); $rid = $r->get_param('recipe_id'); $tbl = $wpdb->prefix . 'tariften_interactions'; $f = $wpdb->get_var($wpdb->prepare("SELECT id FROM $tbl WHERE user_id=%d AND recipe_id=%d AND type='favorite'", $u, $rid)); $c = $wpdb->get_var($wpdb->prepare("SELECT id FROM $tbl WHERE user_id=%d AND recipe_id=%d AND type='cooked'", $u, $rid)); return new WP_REST_Response(['favorite'=>!!$f, 'cooked'=>!!$c], 200); }
 
+    /**
+     * Pişirme sayısını getir
+     */
+    private function get_cooked_count($recipe_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'tariften_interactions';
+        return (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE recipe_id = %d AND type = 'cooked'",
+            $recipe_id
+        ));
+    }
+
+    /**
+     * Varsayılan şef ipucu kütüphanesi
+     */
+    private function get_random_chef_tip($recipe_id) {
+        $tips = array(
+            "Malzemeleri oda sıcaklığında kullanmak lezzeti artırır.",
+            "Yemekleri pişirmeden önce tüm malzemeleri hazırlayın.",
+            "Baharatları yağda kavurmak aromasını daha iyi açığa çıkarır.",
+            "Et pişirirken sık sık çevirmekten kaçının.",
+            "Makarna suyuna tuz eklemeyi unutmayın.",
+            "Sebzeleri buharda pişirmek besin değerlerini korur.",
+            "Tavayı önceden ısıtmak yapışmayı önler.",
+            "Limon suyu veya sirke yemeklere ferahlık katar.",
+            "Taze otları yemeğin sonunda eklemek aromasını korur.",
+            "Pişirme sırasında kapağı çok açmayın.",
+            "Tereyağını köpürene kadar ısıtın, sonra malzemeleri ekleyin.",
+            "Yemekleri dinlendirmek lezzetin oturmasını sağlar.",
+            "Keskin bıçak kullanmak hem güvenli hem de pratiktir.",
+            "Soğan doğrarken ağlamanızı önlemek için buzdolabında bekletin.",
+            "Et marine ederken buzdolabında bekletin."
+        );
+        
+        // Deterministik seçim (recipe_id bazlı)
+        $index = $recipe_id % count($tips);
+        return $tips[$index];
+    }
+
     private function format_recipe_for_api( $post ) {
         $id = $post->ID;
         $image_url = get_the_post_thumbnail_url( $id, 'large' );
@@ -2512,6 +2568,24 @@ MEVCUT (HATALI OLABİLİR):
             // Metin: Tarif Adı + (Görsel Hazırlanıyor)
             $placeholder_text = $title . "\n(Görsel Hazırlanıyor)";
             $image_url = 'https://placehold.co/800x600/db4c3f/ffffff?font=lora&text=' . urlencode($placeholder_text);
+        }
+
+        // Chef tip - eğer boşsa varsayılan ipucu kütüphanesinden seç
+        $chef_tip = get_post_meta($id, 'tariften_chef_tip', true);
+        if (empty($chef_tip)) {
+            $chef_tip = $this->get_random_chef_tip($id);
+        }
+
+        // Keywords - eğer boşsa otomatik oluştur
+        $keywords = get_post_meta($id, 'tariften_keywords', true);
+        if (empty($keywords)) {
+            $auto_keywords = array_merge(
+                $this->get_term_names($id, 'meal_type'),
+                $this->get_term_names($id, 'cuisine'),
+                $this->get_term_names($id, 'diet'),
+                $this->get_term_names($id, 'difficulty')
+            );
+            $keywords = implode(', ', array_filter($auto_keywords));
         }
 
         $seo = array(
@@ -2537,6 +2611,10 @@ MEVCUT (HATALI OLABİLİR):
             'difficulty' => $this->get_term_names( $id, 'difficulty' ),
             'collection' => $this->get_term_names( $id, 'collection' ), 
             'author_id' => $post->post_author,
+            'chef_tip' => $chef_tip,
+            'serving_weight' => get_post_meta($id, 'tariften_serving_weight', true) ?: '',
+            'keywords' => $keywords,
+            'cooked_count' => $this->get_cooked_count($id),
             'seo' => $seo 
         );
     }
