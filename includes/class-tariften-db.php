@@ -87,6 +87,19 @@ class Tariften_DB {
         ) $charset_collate;";
         dbDelta( $sql_cache );
 
+        // 6. Newsletter Aboneleri
+        $table_newsletter = $wpdb->prefix . 'tariften_newsletter';
+        $sql_newsletter = "CREATE TABLE $table_newsletter (
+            id mediumint(9) NOT NULL AUTO_INCREMENT,
+            email varchar(255) NOT NULL,
+            status varchar(20) DEFAULT 'active',
+            source varchar(50) DEFAULT 'footer',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY  (id),
+            UNIQUE KEY email (email)
+        ) $charset_collate;";
+        dbDelta( $sql_newsletter );
+
         update_option( 'tariften_db_version', TARIFTEN_DB_VERSION );
     }
 }
