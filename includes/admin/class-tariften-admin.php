@@ -203,8 +203,9 @@ class Tariften_Admin {
         }
 
         // Set headers for CSV download (after confirming file can be created)
+        $filename = sanitize_file_name('bulten-aboneleri-' . current_time('Y-m-d') . '.csv');
         header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename=bulten-aboneleri-' . current_time('Y-m-d') . '.csv');
+        header('Content-Disposition: attachment; filename=' . $filename);
         header('Pragma: no-cache');
         header('Expires: 0');
 
