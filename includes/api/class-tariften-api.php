@@ -231,6 +231,7 @@ class Tariften_API {
         $table = $wpdb->prefix . 'tariften_newsletter';
         
         // Zaten kayıtlı mı kontrol et
+        // Note: $table is safe - constructed from wpdb->prefix (WordPress core) + hardcoded string
         $existing = $wpdb->get_var($wpdb->prepare(
             "SELECT id FROM $table WHERE email = %s", 
             $email

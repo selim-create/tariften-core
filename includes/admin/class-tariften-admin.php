@@ -115,7 +115,7 @@ class Tariften_Admin {
     public function newsletter_page_html() {
         global $wpdb;
         $table = $wpdb->prefix . 'tariften_newsletter';
-        // Note: Table name is constructed safely from wpdb prefix
+        // Note: Table name is safe - constructed from wpdb->prefix (WordPress core) + hardcoded 'tariften_newsletter'
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $subscribers = $wpdb->get_results("SELECT * FROM {$table} ORDER BY created_at DESC");
         ?>
@@ -155,6 +155,7 @@ class Tariften_Admin {
             
             <?php if (!empty($subscribers)): ?>
             <p style="margin-top: 20px;">
+                <!-- CSV export functionality - placeholder for future implementation -->
                 <a href="<?php echo esc_url(admin_url('admin.php?page=tariften_newsletter&export=csv')); ?>" class="button">
                     CSV Olarak İndir
                 </a>
