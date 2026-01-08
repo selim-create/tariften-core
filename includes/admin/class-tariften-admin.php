@@ -11,6 +11,7 @@ class Tariften_Admin {
     public function __construct() {
         add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
         add_action( 'admin_init', array( $this, 'register_settings' ) );
+        add_action( 'admin_init', array( $this, 'handle_newsletter_csv_export' ) );
     }
 
     public function add_admin_menu() {
@@ -155,14 +156,87 @@ class Tariften_Admin {
             
             <?php if (!empty($subscribers)): ?>
             <p style="margin-top: 20px;">
-                <!-- CSV export functionality - placeholder for future implementation -->
-                <a href="<?php echo esc_url(admin_url('admin.php?page=tariften_newsletter&export=csv')); ?>" class="button">
+                <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin.php?page=tariften_newsletter&export=csv'), 'tariften_export_csv')); ?>" class="button">
                     CSV Olarak İndir
                 </a>
             </p>
             <?php endif; ?>
         </div>
         <?php
+    }
+
+    /**
+     * Handle CSV Export
+     */
+    public function handle_newsletter_csv_export() {
+        // Check if export parameter is set
+        if (!isset($_GET['page']) || $_GET['page'] !== 'tariften_newsletter') {
+            return;
+        }
+
+        if (!isset($_GET['export']) || $_GET['export'] !== 'csv') {
+            return;
+        }
+
+        // Verify nonce for security
+        if (!isset($_GET['_wpnonce']) || !wp_verify_nonce($_GET['_wpnonce'], 'tariften_export_csv')) {
+            wp_die('Güvenlik kontrolü başarısız.');
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_die('Bu işlemi gerçekleştirme yetkiniz yok.');
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'tariften_newsletter';
+        
+        // Note: Table name is safe - constructed from wpdb->prefix (WordPress core) + hardcoded 'tariften_newsletter'
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $subscribers = $wpdb->get_results("SELECT email, status, created_at FROM {$table} ORDER BY created_at DESC", ARRAY_A);
+
+        // Open output stream first before sending headers
+        $output = fopen('php://output', 'w');
+        
+        if (!$output) {
+            wp_die('CSV dosyası oluşturulamadı.');
+        }
+
+        // Set headers for CSV download (after confirming file can be created)
+        $filename = sanitize_file_name('bulten-aboneleri-' . current_time('Y-m-d') . '.csv');
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=' . $filename);
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        // Add UTF-8 BOM for proper Excel encoding
+        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+
+        // Write CSV headers
+        fputcsv($output, array('E-posta', 'Kayıt Tarihi', 'Durum'));
+
+        // Write data rows
+        if (!empty($subscribers)) {
+            foreach ($subscribers as $sub) {
+                // Format date in Turkish style: DD.MM.YYYY HH:MM using WordPress function
+                $formatted_date = '';
+                if (!empty($sub['created_at'])) {
+                    $formatted_date = mysql2date('d.m.Y H:i', $sub['created_at']);
+                }
+
+                // Translate status
+                $status_tr = $sub['status'] === 'active' ? 'Aktif' : 'Pasif';
+
+                fputcsv($output, array(
+                    $sub['email'],
+                    $formatted_date,
+                    $status_tr
+                ));
+            }
+        }
+
+        fclose($output);
+        exit;
     }
 }
 
