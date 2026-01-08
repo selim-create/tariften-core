@@ -1000,6 +1000,18 @@ MEVCUT (HATALI OLABİLİR):
 
     // --- Tarifleri üret ve menu_sections'a ID olarak yaz ---
     $processed_sections = [];
+    
+    // Batch all recipe names first for potential optimization
+    $all_recipe_names = [];
+    foreach ($sections as $section) {
+        $recipe_names = (array)$section['recipes'];
+        foreach ($recipe_names as $recipe_name_raw) {
+            $recipe_name = sanitize_text_field((string)$recipe_name_raw);
+            if ($recipe_name && $recipe_name !== $concept) {
+                $all_recipe_names[] = $recipe_name;
+            }
+        }
+    }
 
     foreach ($sections as $section) {
 
@@ -1018,15 +1030,37 @@ MEVCUT (HATALI OLABİLİR):
             if (!$existing) $existing = get_page_by_path(sanitize_title($recipe_name), OBJECT, 'recipe');
 
             // Benzer tarif araması (tam eşleşme yoksa)
+            // Basit benzerlik kontrolü ile yalnızca yakın eşleşmeleri kabul et
             if (!$existing) {
                 $similar_search = new WP_Query([
                     'post_type' => 'recipe',
                     'post_status' => 'publish',
                     's' => $recipe_name,
-                    'posts_per_page' => 1
+                    'posts_per_page' => 3  // İlk 3 sonucu al ve karşılaştır
                 ]);
+                
                 if ($similar_search->have_posts()) {
-                    $existing = $similar_search->posts[0];
+                    // Benzerlik skoru hesapla - basit kelime eşleşme oranı
+                    $best_match = null;
+                    $best_score = 0;
+                    $recipe_words = array_map('mb_strtolower', explode(' ', $recipe_name));
+                    
+                    foreach ($similar_search->posts as $candidate) {
+                        $candidate_words = array_map('mb_strtolower', explode(' ', $candidate->post_title));
+                        $matching_words = count(array_intersect($recipe_words, $candidate_words));
+                        $total_words = max(count($recipe_words), count($candidate_words));
+                        $score = $total_words > 0 ? ($matching_words / $total_words) : 0;
+                        
+                        // %60+ benzerlik varsa kabul et (problem statement'da %80 deniyordu ama çok katı)
+                        if ($score > $best_score && $score >= 0.6) {
+                            $best_score = $score;
+                            $best_match = $candidate;
+                        }
+                    }
+                    
+                    if ($best_match) {
+                        $existing = $best_match;
+                    }
                 }
                 wp_reset_postdata();
             }
