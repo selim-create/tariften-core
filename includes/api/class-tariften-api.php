@@ -2611,9 +2611,9 @@ MEVCUT (HATALI OLABİLİR):
             'difficulty' => $this->get_term_names( $id, 'difficulty' ),
             'collection' => $this->get_term_names( $id, 'collection' ), 
             'author_id' => $post->post_author,
-            'chef_tip' => $chef_tip ?: '',
+            'chef_tip' => $chef_tip,
             'serving_weight' => get_post_meta($id, 'tariften_serving_weight', true) ?: '',
-            'keywords' => $keywords ?: '',
+            'keywords' => $keywords,
             'cooked_count' => $this->get_cooked_count($id),
             'seo' => $seo 
         );
