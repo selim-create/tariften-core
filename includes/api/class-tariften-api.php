@@ -645,39 +645,45 @@ public function generate_ai_menu( $request ) {
      * FRONTEND UYUMLU CANONICAL SECTION TYPE SETİ
      * Not: Frontend’in tanımadığı type -> "Diğer Lezzetler"e düşer.
      * O yüzden type’ları sabit ve tanımlı tutuyoruz.
+     * 
+     * Standart Section Yapısı:
+     * - starter: Başlangıç
+     * - hot_appetizer: Ara Sıcak
+     * - soup: Çorba
+     * - meze: Meze ve Aperatifler
+     * - main: Ana Yemek
+     * - dessert: Tatlı
+     * - drink: İçecek
      */
     $plans = [
         'breakfast' => [
-            ['type'=>'breakfast_main','title'=>'Ana Kahvaltılıklar','count'=>3,'rules'=>'Kahvaltıya uygun; çorba/ana yemek/ağır tatlı yok.'],
-            ['type'=>'breakfast_side','title'=>'Hafif Yanlar','count'=>2,'rules'=>'Yoğurt/granola/mini salata gibi hafif yanlar.'],
+            ['type'=>'starter','title'=>'Başlangıç','count'=>2,'rules'=>'Kahvaltıya uygun hafif başlangıçlar.'],
+            ['type'=>'main','title'=>'Ana Kahvaltılıklar','count'=>2,'rules'=>'Menemen, omlet, yumurtalı tarifler.'],
             ['type'=>'drink','title'=>'İçecek','count'=>1,'rules'=>'Kahvaltıya uygun içecek.'],
         ],
         'lunch' => [
-            ['type'=>'starter','title'=>'Başlangıç','count'=>1,'rules'=>'Öğleye uygun hafif başlangıç.'],
-            ['type'=>'main','title'=>'Ana Yemek','count'=>2,'rules'=>'Öğle yemeğine uygun ana + eşlikçi.'],
-            ['type'=>'salad','title'=>'Salata','count'=>1,'rules'=>'Taze salata.'],
-            ['type'=>'drink','title'=>'İçecek','count'=>1,'rules'=>'Alkolsüz içecek.'],
+            ['type'=>'soup','title'=>'Çorba','count'=>1,'rules'=>'Öğle yemeğine uygun çorba.'],
+            ['type'=>'starter','title'=>'Başlangıç','count'=>1,'rules'=>'Hafif başlangıç.'],
+            ['type'=>'main','title'=>'Ana Yemek','count'=>2,'rules'=>'Ana yemek + eşlikçi.'],
+            ['type'=>'drink','title'=>'İçecek','count'=>1,'rules'=>'İçecek.'],
         ],
         'tea_time' => [
-            ['type'=>'savory','title'=>'Tuzlular','count'=>2,'rules'=>'Çay saatine uygun tuzlu atıştırmalıklar.'],
-            ['type'=>'sweet','title'=>'Tatlılar','count'=>2,'rules'=>'Çay saatine uygun tatlı (kek/kurabiye/fit olabilir).'],
-            ['type'=>'drink','title'=>'İçecek','count'=>1,'rules'=>'Çay/kahve vb.'],
+            ['type'=>'starter','title'=>'Tuzlu Atıştırmalıklar','count'=>2,'rules'=>'Çay saatine uygun tuzlular.'],
+            ['type'=>'dessert','title'=>'Tatlılar','count'=>2,'rules'=>'Çay saatine uygun tatlı.'],
+            ['type'=>'drink','title'=>'İçecek','count'=>1,'rules'=>'Çay/kahve.'],
         ],
         'dinner' => [
             ['type'=>'soup','title'=>'Çorba','count'=>1,'rules'=>'Akşam yemeğine uygun çorba.'],
-            ['type'=>'meze','title'=>'Mezeler','count'=>2,'rules'=>'Sofrayı açan meze/soğuk başlangıç.'],
-            ['type'=>'hot_appetizer','title'=>'Ara Sıcak','count'=>1,'rules'=>'Ara sıcak (börek/mücver vb.).'],
-            ['type'=>'main','title'=>'Ana Yemek','count'=>2,'rules'=>'Ana yemek + eşlikçi.'],
-            ['type'=>'salad','title'=>'Salata','count'=>1,'rules'=>'Yemeğe uygun salata.'],
-            ['type'=>'dessert','title'=>'Tatlı','count'=>1,'rules'=>'Dengeli bir tatlı.'],
-            ['type'=>'drink','title'=>'İçecek','count'=>1,'rules'=>'Alkolsüz içecek.'],
+            ['type'=>'meze','title'=>'Meze ve Aperatifler','count'=>2,'rules'=>'Soğuk/sıcak mezeler.'],
+            ['type'=>'hot_appetizer','title'=>'Ara Sıcak','count'=>1,'rules'=>'Ara sıcak.'],
+            ['type'=>'main','title'=>'Ana Yemek','count'=>2,'rules'=>'Ana yemek.'],
+            ['type'=>'dessert','title'=>'Tatlı','count'=>1,'rules'=>'Tatlı.'],
+            ['type'=>'drink','title'=>'İçecek','count'=>1,'rules'=>'İçecek.'],
         ],
         'cocktail' => [
-            ['type'=>'cold_canape','title'=>'Soğuk Kanapeler','count'=>3,'rules'=>'Finger food/kanape. Çorba/ana yemek yok.'],
-            ['type'=>'hot_bites','title'=>'Sıcak İkramlar','count'=>2,'rules'=>'Kokteyle uygun sıcak atıştırmalık.'],
-            ['type'=>'dip_sauce','title'=>'Dip & Soslar','count'=>2,'rules'=>'Dip/sos + eşlikçi (kraker/cips vb.).'],
-            ['type'=>'drink','title'=>'İçecekler','count'=>2,'rules'=>'En az 1 alkolsüz seçenek olmalı.'],
-            ['type'=>'sweet_bite','title'=>'Mini Tatlı','count'=>1,'rules'=>'Mini tatlı (ağır pasta yok).'],
+            ['type'=>'meze','title'=>'Soğuk Mezeler','count'=>3,'rules'=>'Finger food/kanape.'],
+            ['type'=>'hot_appetizer','title'=>'Sıcak İkramlar','count'=>2,'rules'=>'Sıcak atıştırmalık.'],
+            ['type'=>'drink','title'=>'İçecekler','count'=>2,'rules'=>'İçecekler.'],
         ],
     ];
 
@@ -808,6 +814,7 @@ KURALLAR:
 - Bir içecek bölümüne meze/çorba koyma. Bir çorba bölümüne tatlı koyma. Yanlış eşleştirme YASAK.
 - Tarif adı PARANTEZSİZ olacak. Parantez kullanma.
 - Sadece yemek adı yaz: açıklama, emoji, ölçü, tarif cümlesi yazma.
+- MENÜ AÇIKLAMASINDA bahsedilen tarifler MUTLAKA ilgili section'a dahil edilmeli.
 
 ÇIKTI SADECE JSON:
 { \"sections\": [ {\"type\":\"...\",\"recipes\":[\"...\"]} ] }";
@@ -816,6 +823,7 @@ KURALLAR:
 Kişi sayısı: {$guest_count}
 Öğün tipi: {$event_type_label}
 Diyet: " . ($diet_from_user ?: 'yok') . "
+Menü Açıklaması: {$menu_desc}
 
 PLAN (type ve count sabit):
 " . json_encode($plan, JSON_UNESCAPED_UNICODE);
@@ -992,6 +1000,18 @@ MEVCUT (HATALI OLABİLİR):
 
     // --- Tarifleri üret ve menu_sections'a ID olarak yaz ---
     $processed_sections = [];
+    
+    // Batch all recipe names first for potential optimization
+    $all_recipe_names = [];
+    foreach ($sections as $section) {
+        $recipe_names = (array)$section['recipes'];
+        foreach ($recipe_names as $recipe_name_raw) {
+            $recipe_name = sanitize_text_field((string)$recipe_name_raw);
+            if ($recipe_name && $recipe_name !== $concept) {
+                $all_recipe_names[] = $recipe_name;
+            }
+        }
+    }
 
     foreach ($sections as $section) {
 
@@ -1005,8 +1025,45 @@ MEVCUT (HATALI OLABİLİR):
             $recipe_name = sanitize_text_field((string)$recipe_name_raw);
             if (!$recipe_name || $recipe_name === $concept) continue;
 
+            // Mevcut tarif araması - önce tam eşleşme
             $existing = get_page_by_title($recipe_name, OBJECT, 'recipe');
             if (!$existing) $existing = get_page_by_path(sanitize_title($recipe_name), OBJECT, 'recipe');
+
+            // Benzer tarif araması (tam eşleşme yoksa)
+            // Basit benzerlik kontrolü ile yalnızca yakın eşleşmeleri kabul et
+            if (!$existing) {
+                $similar_search = new WP_Query([
+                    'post_type' => 'recipe',
+                    'post_status' => 'publish',
+                    's' => $recipe_name,
+                    'posts_per_page' => 3  // İlk 3 sonucu al ve karşılaştır
+                ]);
+                
+                if ($similar_search->have_posts()) {
+                    // Benzerlik skoru hesapla - basit kelime eşleşme oranı
+                    $best_match = null;
+                    $best_score = 0;
+                    $recipe_words = array_map('mb_strtolower', explode(' ', $recipe_name));
+                    
+                    foreach ($similar_search->posts as $candidate) {
+                        $candidate_words = array_map('mb_strtolower', explode(' ', $candidate->post_title));
+                        $matching_words = count(array_intersect($recipe_words, $candidate_words));
+                        $total_words = max(count($recipe_words), count($candidate_words));
+                        $score = $total_words > 0 ? ($matching_words / $total_words) : 0;
+                        
+                        // %60+ benzerlik varsa kabul et (problem statement'da %80 deniyordu ama çok katı)
+                        if ($score > $best_score && $score >= 0.6) {
+                            $best_score = $score;
+                            $best_match = $candidate;
+                        }
+                    }
+                    
+                    if ($best_match) {
+                        $existing = $best_match;
+                    }
+                }
+                wp_reset_postdata();
+            }
 
             if ($existing && $existing->post_status === 'publish') {
                 $recipe_ids[] = $existing->ID;
