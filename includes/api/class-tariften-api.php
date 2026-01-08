@@ -147,6 +147,13 @@ class Tariften_API {
                 return is_user_logged_in();
             },
         ));
+
+        // Newsletter Aboneliği (PUBLIC - kimlik doğrulama gerektirmez)
+        register_rest_route($namespace, '/newsletter/subscribe', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'subscribe_newsletter'),
+            'permission_callback' => '__return_true',
+        ));
     }
 
     /**
@@ -202,6 +209,60 @@ class Tariften_API {
         }
 
         return new WP_REST_Response( array( 'success' => true, 'slug' => $post->post_name ), 200 );
+    }
+
+    /**
+     * Newsletter Aboneliği
+     */
+    public function subscribe_newsletter($request) {
+        global $wpdb;
+        $params = $request->get_json_params();
+        $email = sanitize_email($params['email'] ?? '');
+        $source = sanitize_text_field($params['source'] ?? 'footer');
+        
+        // Validasyon
+        if (empty($email) || !is_email($email)) {
+            return new WP_REST_Response([
+                'success' => false, 
+                'message' => 'Geçerli bir e-posta adresi girin.'
+            ], 400);
+        }
+        
+        $table = $wpdb->prefix . 'tariften_newsletter';
+        
+        // Zaten kayıtlı mı kontrol et
+        // Note: $table is safe - constructed from wpdb->prefix (WordPress core) + hardcoded string
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $table WHERE email = %s", 
+            $email
+        ));
+        
+        if ($existing) {
+            return new WP_REST_Response([
+                'success' => true, 
+                'message' => 'Bu e-posta zaten bültenimize kayıtlı.'
+            ], 200);
+        }
+        
+        // Yeni kayıt ekle
+        $result = $wpdb->insert($table, [
+            'email' => $email,
+            'status' => 'active',
+            'source' => $source,
+            'created_at' => current_time('mysql')
+        ]);
+        
+        if ($result === false) {
+            return new WP_REST_Response([
+                'success' => false, 
+                'message' => 'Kayıt sırasında bir hata oluştu.'
+            ], 500);
+        }
+        
+        return new WP_REST_Response([
+            'success' => true, 
+            'message' => 'Bülten aboneliğiniz başarıyla alındı!'
+        ], 201);
     }
     
 /**
@@ -2375,6 +2436,24 @@ MEVCUT (HATALI OLABİLİR):
             'paged'          => $page, // YENİ: Hangi sayfa
             'post_status'    => 'publish',
         );
+
+        // Kullanıcının kendi tariflerini getirmek için
+        $author = $request->get_param('author');
+        if ($author === 'me') {
+            // Token'dan kullanıcı ID'sini al
+            $current_user_id = get_current_user_id();
+            if ($current_user_id > 0) {
+                $args['author'] = $current_user_id;
+            } else {
+                // Kullanıcı giriş yapmamışsa boş döndür
+                return new WP_REST_Response([
+                    'success' => true,
+                    'data' => [],
+                    'total' => 0,
+                    'message' => 'Giriş yapmanız gerekiyor.'
+                ], 200);
+            }
+        }
 
         if ( !empty( $slug ) ) { $args['name'] = $slug; $args['posts_per_page'] = 1; } 
         elseif ( !empty( $id ) ) { $args['p'] = $id; } 

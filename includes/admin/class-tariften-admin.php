@@ -23,6 +23,15 @@ class Tariften_Admin {
             'dashicons-superhero',
             60
         );
+
+        add_submenu_page(
+            'tariften_core',
+            'Bülten Aboneleri',
+            'Bülten Aboneleri',
+            'manage_options',
+            'tariften_newsletter',
+            array($this, 'newsletter_page_html')
+        );
     }
 
     public function register_settings() {
@@ -99,6 +108,59 @@ class Tariften_Admin {
 
                 <?php submit_button(); ?>
             </form>
+        </div>
+        <?php
+    }
+
+    public function newsletter_page_html() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'tariften_newsletter';
+        // Note: Table name is safe - constructed from wpdb->prefix (WordPress core) + hardcoded 'tariften_newsletter'
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $subscribers = $wpdb->get_results("SELECT * FROM {$table} ORDER BY created_at DESC");
+        ?>
+        <div class="wrap">
+            <h1>Bülten Aboneleri</h1>
+            <p>Toplam <?php echo esc_html(count($subscribers)); ?> abone</p>
+            
+            <table class="wp-list-table widefat fixed striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>E-posta</th>
+                        <th>Kaynak</th>
+                        <th>Durum</th>
+                        <th>Kayıt Tarihi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($subscribers)): ?>
+                        <tr><td colspan="5">Henüz abone yok.</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($subscribers as $sub): ?>
+                            <tr>
+                                <td><?php echo esc_html($sub->id); ?></td>
+                                <td><strong><?php echo esc_html($sub->email); ?></strong></td>
+                                <td><?php echo esc_html($sub->source); ?></td>
+                                <td>
+                                    <span class="<?php echo $sub->status === 'active' ? 'dashicons dashicons-yes' : 'dashicons dashicons-no'; ?>"></span>
+                                    <?php echo esc_html($sub->status); ?>
+                                </td>
+                                <td><?php echo esc_html($sub->created_at); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+            
+            <?php if (!empty($subscribers)): ?>
+            <p style="margin-top: 20px;">
+                <!-- CSV export functionality - placeholder for future implementation -->
+                <a href="<?php echo esc_url(admin_url('admin.php?page=tariften_newsletter&export=csv')); ?>" class="button">
+                    CSV Olarak İndir
+                </a>
+            </p>
+            <?php endif; ?>
         </div>
         <?php
     }
