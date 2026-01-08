@@ -9,6 +9,7 @@ class Tariften_CPT {
     public function register_all() {
         $this->register_recipes();
         $this->register_ingredients();
+        $this->register_menus(); // YENİ: Menüleri kaydet
         $this->register_taxonomies();
     }
 
@@ -33,6 +34,18 @@ class Tariften_CPT {
         ) );
     }
 
+    // YENİ: Menü CPT Tanımı
+    private function register_menus() {
+        register_post_type( 'menu', array(
+            'labels'      => array( 'name' => 'Menüler', 'singular_name' => 'Menü' ),
+            'public'      => true,
+            'show_in_rest'=> true,
+            'supports'    => array( 'title', 'editor', 'thumbnail', 'excerpt', 'custom-fields', 'author' ),
+            'menu_icon'   => 'dashicons-clipboard',
+            'rewrite'     => array( 'slug' => 'menu' ),
+        ) );
+    }
+
     private function register_taxonomies() {
         // Mevcutlar
         $taxs = [
@@ -51,13 +64,14 @@ class Tariften_CPT {
             ) );
         }
 
-        // YENİ: Koleksiyonlar (Editör Seçimi, Vitrin vb. için)
-        register_taxonomy( 'collection', 'recipe', array(
+      // KOLEKSİYONLAR: Hem Tarifler HEM DE Menüler için aktif ediyoruz.
+        // Bu sayede WP Admin panelinde Menü düzenlerken sağda "Koleksiyonlar" kutusu çıkacak.
+        register_taxonomy( 'collection', ['recipe', 'menu'], array(
             'label'        => 'Koleksiyonlar',
             'rewrite'      => array( 'slug' => 'koleksiyon' ),
-            'hierarchical' => true, // Checkbox gibi seçilsin
+            'hierarchical' => true,
             'show_in_rest' => true,
-            'description'  => 'Anasayfa vitrin alanları için etiketleme (Örn: Editörün Seçimi, Popüler)',
+            'description'  => 'Anasayfa vitrin alanları için etiketleme (Örn: Vitrin, Editörün Seçimi)',
         ) );
     }
 }

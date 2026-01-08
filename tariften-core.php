@@ -45,3 +45,45 @@ class Tariften_Core {
 
 // Eklentiyi Ateşle
 new Tariften_Core();
+
+/**
+ * Headless Frontend Yönlendirmesi
+ * * API sitesinin ön yüzüne (Homepage, Single Post vb.) gelen tüm istekleri
+ * ana frontend domainine (tariften.com) yönlendirir.
+ * * Hariç Tutulanlar:
+ * - Admin Paneli (/wp-admin)
+ * - Login Ekranı (wp-login.php)
+ * - REST API (/wp-json)
+ * - Cron İşlemleri
+ */
+function tariften_headless_redirect() {
+    // 1. Admin paneli, Login sayfası veya Cron çalışıyorsa müdahale etme
+    if ( is_admin() || 'wp-login.php' === $GLOBALS['pagenow'] || defined( 'DOING_CRON' ) ) {
+        return;
+    }
+
+    // 2. Eğer istek REST API'ye geliyorsa müdahale etme (Frontend buradan besleniyor!)
+    $path = $_SERVER['REQUEST_URI'];
+    if ( strpos( $path, '/wp-json/' ) !== false || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+        return;
+    }
+
+    // 3. RSS Feed'leri de yönlendir (Opsiyonel, SEO için iyi)
+    if ( is_feed() ) {
+        // İstersen return; diyerek feedleri açık bırakabilirsin.
+    }
+
+    // 4. Hedef Domain (Frontend)
+    $frontend_url = 'https://tariften.com'; 
+
+    // Seçenek A: Direkt Ana Sayfaya Yönlendir (En Güvenlisi)
+    wp_redirect( $frontend_url, 301 );
+    
+    // Seçenek B: Link yapısı aynıysa (örn: api.com/tarif/x -> tariften.com/tarif/x)
+    // wp_redirect( $frontend_url . $path, 301 );
+
+    exit;
+}
+
+// WordPress şablonları yüklenmeden hemen önce çalıştır
+add_action( 'template_redirect', 'tariften_headless_redirect' );
