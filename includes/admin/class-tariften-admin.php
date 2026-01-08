@@ -213,11 +213,10 @@ class Tariften_Admin {
         // Write data rows
         if (!empty($subscribers)) {
             foreach ($subscribers as $sub) {
-                // Format date in Turkish style: DD.MM.YYYY HH:MM
+                // Format date in Turkish style: DD.MM.YYYY HH:MM using WordPress function
                 $formatted_date = '';
                 if (!empty($sub['created_at'])) {
-                    $timestamp = strtotime($sub['created_at']);
-                    $formatted_date = date('d.m.Y H:i', $timestamp);
+                    $formatted_date = mysql2date('d.m.Y H:i', $sub['created_at']);
                 }
 
                 // Translate status
