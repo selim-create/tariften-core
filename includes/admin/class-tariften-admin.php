@@ -195,18 +195,18 @@ class Tariften_Admin {
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $subscribers = $wpdb->get_results("SELECT email, status, created_at FROM {$table} ORDER BY created_at DESC", ARRAY_A);
 
-        // Set headers for CSV download
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename=bulten-aboneleri-' . current_time('Y-m-d') . '.csv');
-        header('Pragma: no-cache');
-        header('Expires: 0');
-
-        // Open output stream
+        // Open output stream first before sending headers
         $output = fopen('php://output', 'w');
         
         if (!$output) {
             wp_die('CSV dosyası oluşturulamadı.');
         }
+
+        // Set headers for CSV download (after confirming file can be created)
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=bulten-aboneleri-' . current_time('Y-m-d') . '.csv');
+        header('Pragma: no-cache');
+        header('Expires: 0');
 
         // Add UTF-8 BOM for proper Excel encoding
         fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
