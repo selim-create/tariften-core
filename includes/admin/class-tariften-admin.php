@@ -115,11 +115,13 @@ class Tariften_Admin {
     public function newsletter_page_html() {
         global $wpdb;
         $table = $wpdb->prefix . 'tariften_newsletter';
-        $subscribers = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC");
+        // Note: Table name is constructed safely from wpdb prefix
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $subscribers = $wpdb->get_results("SELECT * FROM {$table} ORDER BY created_at DESC");
         ?>
         <div class="wrap">
             <h1>Bülten Aboneleri</h1>
-            <p>Toplam <?php echo count($subscribers); ?> abone</p>
+            <p>Toplam <?php echo esc_html(count($subscribers)); ?> abone</p>
             
             <table class="wp-list-table widefat fixed striped">
                 <thead>
@@ -153,7 +155,7 @@ class Tariften_Admin {
             
             <?php if (!empty($subscribers)): ?>
             <p style="margin-top: 20px;">
-                <a href="<?php echo admin_url('admin.php?page=tariften_newsletter&export=csv'); ?>" class="button">
+                <a href="<?php echo esc_url(admin_url('admin.php?page=tariften_newsletter&export=csv')); ?>" class="button">
                     CSV Olarak İndir
                 </a>
             </p>
